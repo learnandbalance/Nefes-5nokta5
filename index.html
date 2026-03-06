@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Nefes 5.5 / 5.5</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <div class="brand">
+        <div class="dot"></div>
+        <h1>5.5 / 5.5 Nefes</h1>
+      </div>
+
+      <div class="toggles">
+        <label class="switch">
+          <input id="soundToggle" type="checkbox" checked />
+          <span class="slider"></span>
+          <span class="switch-label">Ses</span>
+        </label>
+      </div>
+    </header>
+
+    <section class="stage" aria-label="Nefes görseli">
+      <div class="orb-wrap">
+        <div id="orb" class="orb" role="img" aria-label="Nefes dairesi"></div>
+      </div>
+
+      <div class="readout" aria-live="polite">
+        <div class="phase">
+          <span id="phaseText">Hazır</span>
+          <span class="sep">•</span>
+          <span id="phaseTimer">00.0</span>
+        </div>
+
+        <div class="session">
+          <span>Seans:</span>
+          <span id="sessionTimer">00:00</span>
+          <span class="sep">/</span>
+          <span id="sessionTotal">05:00</span>
+          <span class="muted" id="doneText"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="controls" aria-label="Kontroller">
+      <div class="presets" role="group" aria-label="Süre seçenekleri">
+        <button class="pill preset" data-min="5">5 dk</button>
+        <button class="pill preset" data-min="10">10 dk</button>
+        <button class="pill preset" data-min="15">15 dk</button>
+        <button class="pill preset" data-min="20">20 dk</button>
+        <button class="pill preset" data-min="30">30 dk</button>
+        <button class="pill preset" data-min="45">45 dk</button>
+        <button class="pill preset" data-min="60">60 dk</button>
+
+        <div class="custom">
+          <label for="customMin" class="muted">Özel (dk)</label>
+          <input id="customMin" type="number" min="1" max="240" step="1" value="5" />
+        </div>
+      </div>
+
+      <div class="buttons">
+        <button id="startBtn" class="btn primary">Başlat</button>
+        <button id="pauseBtn" class="btn" disabled>Durdur</button>
+        <button id="resetBtn" class="btn" disabled>Sıfırla</button>
+        <button id="backBtn" class="btn" disabled>Geri Al (1 döngü)</button>
+      </div>
+
+      <footer class="hint">
+        İpucu: Sesin çalışması için tarayıcı, ilk başlatmayı kullanıcı etkileşimiyle ister (Başlat’a basınca otomatik).
+      </footer>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+``
