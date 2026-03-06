@@ -15,7 +15,7 @@
       </div>
 
       <div class="toggles">
-        <label class="switch">
+        <label class="switch" title="Ses aç/kapat">
           <input id="soundToggle" type="checkbox" checked />
           <span class="slider"></span>
           <span class="switch-label">Ses</span>
@@ -37,7 +37,7 @@
 
         <div class="session">
           <span>Seans:</span>
-          <span id="sessionTimer">00:00</span>
+          <span id="sessionTimer">05:00</span>
           <span class="sep">/</span>
           <span id="sessionTotal">05:00</span>
           <span class="muted" id="doneText"></span>
@@ -47,7 +47,7 @@
 
     <section class="controls" aria-label="Kontroller">
       <div class="presets" role="group" aria-label="Süre seçenekleri">
-        <button class="pill preset" data-min="5">5 dk</button>
+        <button class="pill preset active" data-min="5">5 dk</button>
         <button class="pill preset" data-min="10">10 dk</button>
         <button class="pill preset" data-min="15">15 dk</button>
         <button class="pill preset" data-min="20">20 dk</button>
@@ -69,7 +69,7 @@
       </div>
 
       <footer class="hint">
-        İpucu: Sesin çalışması için tarayıcı, ilk başlatmayı kullanıcı etkileşimiyle ister (Başlat’a basınca otomatik).
+        iOS notu: Ses, ilk kez <b>Başlat</b> ile kullanıcı etkileşimi sonrası aktif olur.
       </footer>
     </section>
   </main>
@@ -77,4 +77,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-``
