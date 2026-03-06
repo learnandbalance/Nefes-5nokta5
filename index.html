@@ -15,7 +15,6 @@
         <h1>5.5 / 5.5 Nefes</h1>
       </div>
 
-      <!-- iOS Safari’de görünürlük için sticky + z-index CSS’te -->
       <div class="toggles">
         <label class="switch" title="Ses aç/kapat">
           <input id="soundToggle" type="checkbox" checked />
@@ -26,15 +25,16 @@
     </header>
 
     <section class="stage" aria-label="Nefes görseli">
-      <div class="orb-wrap">
+      <div class="orb-wrap" aria-hidden="true">
         <div id="orb" class="orb" role="img" aria-label="Nefes dairesi"></div>
       </div>
 
       <div class="readout" aria-live="polite">
         <div class="phase">
-          <span id="phaseText">Hazır</span>
-          <span class="sep">•</span>
-          <span id="phaseTimer">00.0</span>
+          <div id="phaseText" class="phaseLine1">Hazır</div>
+          <div class="phaseLine2">
+            <span id="phaseTimer">00.0</span>
+          </div>
         </div>
 
         <div class="session">
@@ -79,3 +79,4 @@
   <script src="app.js"></script>
 </body>
 </html>
+``
