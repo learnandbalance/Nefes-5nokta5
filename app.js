@@ -1,6 +1,6 @@
-// 5.5 / 5.5 nefes — sürekli akor (phase boyunca) + görsel senkron
-const PHASE_LEN = 5.5;           // saniye
-const CYCLE_LEN = PHASE_LEN * 2; // 11 saniye
+// 5.5 / 5.5 nefes — bip/click önlemek için oscillator’lar sürekli, fazlarda crossfade
+const PHASE_LEN = 5.5;
+const CYCLE_LEN = PHASE_LEN * 2;
 
 const phaseText = document.getElementById("phaseText");
 const phaseTimer = document.getElementById("phaseTimer");
@@ -17,28 +17,19 @@ const soundToggle = document.getElementById("soundToggle");
 const customMin = document.getElementById("customMin");
 const presetBtns = [...document.querySelectorAll(".preset")];
 
-let audioCtx = null;
-
-// Seans süresi
+// süre
 let durationSec = 5 * 60;
-let remainingSec = durationSec;
 
-// Döngü kontrol
+// durum
 let running = false;
 let rafId = null;
+let t0 = 0;
+let elapsedBefore = 0;
+let lastPhase = "idle";
 
-// Zaman referansları
-let t0 = 0;            // performance.now() başlangıcı
-let elapsedBefore = 0; // pause öncesi geçen süre (sn)
-let lastPhase = "idle"; // "inhale" | "exhale" | "idle"
-
-// --- yardımcılar ---
+// -------- helpers --------
 function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
-
-function easeInOut(t){
-  // smoothstep
-  return t * t * (3 - 2 * t);
-}
+function easeInOut(t){ return t * t * (3 - 2 * t); }
 
 function fmtMMSS(sec){
   sec = Math.max(0, sec);
@@ -46,42 +37,36 @@ function fmtMMSS(sec){
   const s = Math.floor(sec % 60);
   return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
-
 function fmtPhase(sec){
-  const v = Math.max(0, sec);
-  return v.toFixed(1).padStart(4,"0");
+  return Math.max(0, sec).toFixed(1).padStart(4,"0");
 }
-
-function updateTotalUI(){
-  sessionTotal.textContent = fmtMMSS(durationSec);
-}
-
+function updateTotalUI(){ sessionTotal.textContent = fmtMMSS(durationSec); }
 function updateSessionUI(elapsed){
-  const left = Math.max(0, durationSec - elapsed);
-  sessionTimer.textContent = fmtMMSS(left);
+  sessionTimer.textContent = fmtMMSS(Math.max(0, durationSec - elapsed));
 }
-
 function setOrbScale(scale){
   document.documentElement.style.setProperty("--scale", scale.toFixed(4));
 }
 
-// --- süre seçimi ---
+// -------- duration UI --------
 function setActivePreset(min){
   presetBtns.forEach(b => b.classList.toggle("active", Number(b.dataset.min) === min));
 }
-
+function lockInputs(lock){
+  customMin.disabled = lock;
+  presetBtns.forEach(b => b.disabled = lock);
+}
 function setDurationMinutes(min){
   durationSec = Math.round(min * 60);
-  remainingSec = durationSec;
   elapsedBefore = 0;
   doneText.textContent = "";
-  updateSessionUI(0);
   updateTotalUI();
+  updateSessionUI(0);
 
-  // UI reset
   phaseText.textContent = "Hazır";
   phaseTimer.textContent = "00.0";
   setOrbScale(0.82);
+
   startBtn.textContent = "Başlat";
   startBtn.disabled = false;
   pauseBtn.disabled = true;
@@ -89,107 +74,11 @@ function setDurationMinutes(min){
   backBtn.disabled = true;
 }
 
-// --- audio ---
-let chord = null; // { oscs, gain, filt, phase }
-
-function ensureAudio(){
-  if (!audioCtx){
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if (audioCtx.state === "suspended") audioCtx.resume();
-}
-
-function stopChord(fadeOut = 0.12){
-  if (!audioCtx || !chord) return;
-  const now = audioCtx.currentTime;
-
-  try{
-    chord.gain.gain.cancelScheduledValues(now);
-    const current = Math.max(0.0001, chord.gain.gain.value || 0.0001);
-    chord.gain.gain.setValueAtTime(current, now);
-    chord.gain.gain.exponentialRampToValueAtTime(0.0001, now + fadeOut);
-  } catch(e){}
-
-  chord.oscs.forEach(o => {
-    try { o.stop(now + fadeOut + 0.03); } catch(e) {}
-  });
-
-  chord = null;
-}
-
-function startChord(phase){
-  if (!soundToggle.checked) return;
-  ensureAudio();
-
-  const now = audioCtx.currentTime;
-
-  // Inhale: daha sıcak (C maj) — Exhale: biraz daha "ferah" (D sus2)
-  const inhaleChord = [261.63, 329.63, 392.00]; // C4 E4 G4
-  const exhaleChord = [293.66, 329.63, 440.00]; // D4 E4 A4
-  const freqs = (phase === "inhale") ? inhaleChord : exhaleChord;
-
-  // Önce eski akoru yumuşak kapat (crossfade)
-  stopChord(0.12);
-
-  const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.18, now + 0.18); // yumuşak attack
-
-  const filt = audioCtx.createBiquadFilter();
-  filt.type = "lowpass";
-  filt.frequency.setValueAtTime(1600, now);
-  filt.Q.setValueAtTime(0.8, now);
-
-  // Çok hafif stereo hissi için iki kanala küçük panning (opsiyonel)
-  const panner = audioCtx.createStereoPanner();
-  panner.pan.setValueAtTime(0, now);
-
-  const oscs = [];
-
-  freqs.forEach((f, i) => {
-    // 2 katman: sine + triangle (yumuşak ama harmonik)
-    const osc1 = audioCtx.createOscillator();
-    osc1.type = "sine";
-    osc1.frequency.setValueAtTime(f, now);
-    osc1.detune.setValueAtTime((i - 1) * 2.5, now);
-
-    const osc2 = audioCtx.createOscillator();
-    osc2.type = "triangle";
-    osc2.frequency.setValueAtTime(f, now);
-    osc2.detune.setValueAtTime((1 - i) * 3.5, now);
-
-    const noteGain = audioCtx.createGain();
-    const level = 0.42 + (i === 1 ? 0.08 : 0.0); // orta nota biraz baskın
-    noteGain.gain.setValueAtTime(level, now);
-
-    osc1.connect(noteGain);
-    osc2.connect(noteGain);
-    noteGain.connect(filt);
-
-    oscs.push(osc1, osc2);
-  });
-
-  // Zincir
-  filt.connect(panner);
-  panner.connect(gain);
-  gain.connect(audioCtx.destination);
-
-  oscs.forEach(o => o.start(now));
-
-  chord = { oscs, gain, filt, phase };
-}
-
-function setPhaseAudio(phase){
-  if (!soundToggle.checked) { stopChord(0.12); return; }
-  if (chord && chord.phase === phase) return;
-  startChord(phase);
-}
-
-// --- nefes hesap ---
+// -------- Breath math --------
 function computeBreath(elapsed){
   const inCycle = elapsed % CYCLE_LEN;
-
   let phase, phaseProgress;
+
   if (inCycle < PHASE_LEN){
     phase = "inhale";
     phaseProgress = inCycle / PHASE_LEN;
@@ -198,11 +87,212 @@ function computeBreath(elapsed){
     phaseProgress = (inCycle - PHASE_LEN) / PHASE_LEN;
   }
 
-  const phaseRemaining = PHASE_LEN * (1 - phaseProgress);
-  return { phase, phaseProgress, phaseRemaining };
+  return {
+    phase,
+    phaseProgress,
+    phaseRemaining: PHASE_LEN * (1 - phaseProgress)
+  };
 }
 
-// --- ana loop ---
+// =========================
+//          AUDIO
+// =========================
+let audioCtx = null;
+let master = null;
+let inhaleBus = null;
+let exhaleBus = null;
+let audioReady = false;
+
+function ensureAudio(){
+  if (!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === "suspended") audioCtx.resume();
+
+  if (!audioReady){
+    buildAudioGraph();
+    audioReady = true;
+  }
+}
+
+function buildAudioGraph(){
+  const now = audioCtx.currentTime;
+
+  // master gain
+  master = audioCtx.createGain();
+  master.gain.setValueAtTime(0.0001, now);
+
+  // “room” hissi: hafif delay + lowpass feedback (çok sakin)
+  const delay = audioCtx.createDelay(0.35);
+  delay.delayTime.value = 0.18;
+
+  const fb = audioCtx.createGain();
+  fb.gain.value = 0.18;
+
+  const fbLP = audioCtx.createBiquadFilter();
+  fbLP.type = "lowpass";
+  fbLP.frequency.value = 1200;
+  fbLP.Q.value = 0.7;
+
+  // feedback loop
+  delay.connect(fbLP);
+  fbLP.connect(fb);
+  fb.connect(delay);
+
+  // çıkış zinciri
+  // dry + wet karışımı için: master’a hem dry hem de delay’den dönelim
+  const wet = audioCtx.createGain();
+  wet.gain.value = 0.22;
+
+  // master’a bağla
+  master.connect(audioCtx.destination);
+
+  // Delay’yi master’a düşük seviyede ekle
+  delay.connect(wet);
+  wet.connect(master);
+
+  // iki bus (inhale/exhale) -> delay + master
+  inhaleBus = createChordBus({
+    freqs: [220.00, 277.18, 329.63], // A3 C#4 E4 (sakin, sıcak)
+    color: "warm"
+  });
+
+  exhaleBus = createChordBus({
+    freqs: [293.66, 369.99, 440.00], // D4 F#4 A4 (biraz daha tiz, net)
+    color: "airy"
+  });
+
+  // bus’ları dry + wet’e bağla
+  inhaleBus.out.connect(master);
+  exhaleBus.out.connect(master);
+
+  inhaleBus.out.connect(delay);
+  exhaleBus.out.connect(delay);
+
+  // başlangıçta sessiz
+  inhaleBus.gain.gain.setValueAtTime(0.0001, now);
+  exhaleBus.gain.gain.setValueAtTime(0.0001, now);
+}
+
+function createChordBus({freqs, color}){
+  const now = audioCtx.currentTime;
+
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+
+  // “piyano-pad” hissi: saw çok az + sine baskın + filtre ile yumuşatma
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.setValueAtTime(color === "warm" ? 1400 : 1700, now);
+  lp.Q.setValueAtTime(0.85, now);
+
+  // çok hafif hareket (vibrato) -> daha doğal, akordeon gibi değil çok minimal
+  const lfo = audioCtx.createOscillator();
+  const lfoGain = audioCtx.createGain();
+  lfo.type = "sine";
+  lfo.frequency.value = 0.18;     // çok yavaş
+  lfoGain.gain.value = 3.0;       // detune cents
+  lfo.connect(lfoGain);
+
+  // her nota için iki osilatör: sine (ana) + çok düşük saw (çok az harmonik)
+  const oscs = [];
+  const noteMix = audioCtx.createGain();
+  noteMix.gain.value = 1.0;
+
+  freqs.forEach((f, i) => {
+    // SINE (ana)
+    const s = audioCtx.createOscillator();
+    s.type = "sine";
+    s.frequency.setValueAtTime(f, now);
+    s.detune.setValueAtTime((i - 1) * 1.5, now); // çok küçük detune
+    lfoGain.connect(s.detune);
+
+    // SAW (çok az, “piyano parlaklığı” için)
+    const w = audioCtx.createOscillator();
+    w.type = "sawtooth";
+    w.frequency.setValueAtTime(f, now);
+    w.detune.setValueAtTime((1 - i) * 1.0, now);
+    lfoGain.connect(w.detune);
+
+    // her notaya ayrı gain: saw çok düşük
+    const gS = audioCtx.createGain();
+    const gW = audioCtx.createGain();
+
+    gS.gain.value = 0.33 + (i === 1 ? 0.05 : 0.0);  // sine
+    gW.gain.value = 0.05;                            // saw (çok az)
+
+    s.connect(gS);
+    w.connect(gW);
+    gS.connect(noteMix);
+    gW.connect(noteMix);
+
+    oscs.push(s, w);
+  });
+
+  noteMix.connect(lp);
+  lp.connect(gain);
+
+  // “out” = gain
+  const out = gain;
+
+  // başlat (sadece 1 kere)
+  oscs.forEach(o => o.start(now));
+  lfo.start(now);
+
+  return { oscs, gain, out };
+}
+
+function setPhaseAudio(phase){
+  if (!audioReady) return;
+  const now = audioCtx.currentTime;
+  const FADE = 0.22; // yumuşak crossfade
+
+  // ses kapalıysa ikisini de kıs
+  if (!soundToggle.checked){
+    inhaleBus.gain.gain.cancelScheduledValues(now);
+    exhaleBus.gain.gain.cancelScheduledValues(now);
+    inhaleBus.gain.gain.setTargetAtTime(0.0001, now, 0.06);
+    exhaleBus.gain.gain.setTargetAtTime(0.0001, now, 0.06);
+    master.gain.setTargetAtTime(0.0001, now, 0.06);
+    return;
+  }
+
+  // master aç
+  master.gain.cancelScheduledValues(now);
+  master.gain.setTargetAtTime(0.22, now, 0.08);
+
+  // crossfade
+  if (phase === "inhale"){
+    inhaleBus.gain.gain.cancelScheduledValues(now);
+    exhaleBus.gain.gain.cancelScheduledValues(now);
+
+    inhaleBus.gain.gain.setTargetAtTime(0.22, now, FADE);
+    exhaleBus.gain.gain.setTargetAtTime(0.0001, now, FADE);
+  } else {
+    inhaleBus.gain.gain.cancelScheduledValues(now);
+    exhaleBus.gain.gain.cancelScheduledValues(now);
+
+    inhaleBus.gain.gain.setTargetAtTime(0.0001, now, FADE);
+    exhaleBus.gain.gain.setTargetAtTime(0.22, now, FADE);
+  }
+}
+
+function stopAudioSoft(){
+  if (!audioReady) return;
+  const now = audioCtx.currentTime;
+
+  inhaleBus.gain.gain.cancelScheduledValues(now);
+  exhaleBus.gain.gain.cancelScheduledValues(now);
+  master.gain.cancelScheduledValues(now);
+
+  inhaleBus.gain.gain.setTargetAtTime(0.0001, now, 0.07);
+  exhaleBus.gain.gain.setTargetAtTime(0.0001, now, 0.07);
+  master.gain.setTargetAtTime(0.0001, now, 0.09);
+}
+
+// =========================
+//        MAIN LOOP
+// =========================
 function updateLoop(){
   if (!running) return;
 
@@ -214,49 +304,43 @@ function updateLoop(){
     return;
   }
 
-  remainingSec = durationSec - elapsed;
   updateSessionUI(elapsed);
 
   const { phase, phaseProgress, phaseRemaining } = computeBreath(elapsed);
 
-  // faz değişiminde sürekli akoru değiştir
   if (phase !== lastPhase){
+    // faz değişiminde sadece crossfade (bip yok)
     setPhaseAudio(phase);
     lastPhase = phase;
   }
 
-  // UI
   phaseText.textContent = (phase === "inhale") ? "Nefes Al" : "Nefes Ver";
   phaseTimer.textContent = fmtPhase(phaseRemaining);
 
-  // Ölçek: inhale büyür, exhale küçülür
   const t = easeInOut(clamp(phaseProgress, 0, 1));
   const minS = 0.78;
   const maxS = 1.08;
 
-  let s;
-  if (phase === "inhale") s = minS + (maxS - minS) * t;
-  else s = maxS - (maxS - minS) * t;
+  const s = (phase === "inhale")
+    ? (minS + (maxS - minS) * t)
+    : (maxS - (maxS - minS) * t);
 
   setOrbScale(s);
 
   rafId = requestAnimationFrame(updateLoop);
 }
 
-// --- kontroller ---
-function lockInputs(lock){
-  customMin.disabled = lock;
-  presetBtns.forEach(b => b.disabled = lock);
-}
-
+// =========================
+//        CONTROLS
+// =========================
 function startSession(){
   if (running) return;
 
   doneText.textContent = "";
   running = true;
 
-  // iOS için audio kullanıcı etkileşimi ile aktive olur
-  ensureAudio();
+  ensureAudio(); // iOS için user gesture ile çağrılıyor
+  lastPhase = "idle"; // ilk frame’de setPhaseAudio çalışsın
 
   startBtn.disabled = true;
   pauseBtn.disabled = false;
@@ -265,8 +349,6 @@ function startSession(){
   lockInputs(true);
 
   t0 = performance.now();
-  lastPhase = "idle"; // ilk frame’de setPhaseAudio tetiklensin
-
   rafId = requestAnimationFrame(updateLoop);
 }
 
@@ -279,7 +361,7 @@ function pauseSession(){
   const pausedAt = performance.now();
   elapsedBefore += (pausedAt - t0) / 1000;
 
-  stopChord(0.10);
+  stopAudioSoft();
 
   startBtn.textContent = "Devam";
   startBtn.disabled = false;
@@ -291,20 +373,20 @@ function resumeSession(){
 
   running = true;
   ensureAudio();
+  lastPhase = "idle";
 
   startBtn.disabled = true;
   pauseBtn.disabled = false;
 
   t0 = performance.now();
-  lastPhase = "idle"; // tekrar doğru faz akorunu başlatsın
   rafId = requestAnimationFrame(updateLoop);
 }
 
 function stopSession(completed=false){
   running = false;
   cancelAnimationFrame(rafId);
-  stopChord(0.12);
 
+  stopAudioSoft();
   lockInputs(false);
 
   startBtn.textContent = "Başlat";
@@ -319,19 +401,16 @@ function stopSession(completed=false){
     phaseTimer.textContent = "00.0";
     doneText.textContent = " • Seans bitti.";
     setOrbScale(0.82);
-
-    resetBtn.disabled = false;
-    backBtn.disabled = false;
   }
 }
 
 function resetSession(){
   running = false;
   cancelAnimationFrame(rafId);
-  stopChord(0.12);
+
+  stopAudioSoft();
 
   elapsedBefore = 0;
-  remainingSec = durationSec;
   lastPhase = "idle";
 
   lockInputs(false);
@@ -355,11 +434,9 @@ function backOneCycle(){
   if (running){
     const now = performance.now();
     const elapsed = elapsedBefore + (now - t0) / 1000;
-    const newElapsed = Math.max(0, elapsed - back);
-
-    elapsedBefore = newElapsed;
+    elapsedBefore = Math.max(0, elapsed - back);
     t0 = performance.now();
-    lastPhase = "idle"; // yeni fazın akorunu yeniden başlat
+    lastPhase = "idle";
   } else {
     elapsedBefore = Math.max(0, elapsedBefore - back);
     updateSessionUI(elapsedBefore);
@@ -367,11 +444,10 @@ function backOneCycle(){
     const { phase, phaseRemaining } = computeBreath(elapsedBefore);
     phaseText.textContent = (phase === "inhale") ? "Nefes Al" : "Nefes Ver";
     phaseTimer.textContent = fmtPhase(phaseRemaining);
-    setOrbScale(0.82);
   }
 }
 
-// --- event wiring ---
+// ---- events ----
 presetBtns.forEach(btn => {
   btn.addEventListener("click", () => {
     const min = Number(btn.dataset.min);
@@ -398,19 +474,15 @@ resetBtn.addEventListener("click", resetSession);
 backBtn.addEventListener("click", backOneCycle);
 
 soundToggle.addEventListener("change", () => {
-  if (!soundToggle.checked){
-    stopChord(0.12);
-  } else {
-    // seans çalışıyorsa o anki fazın akorunu başlat
-    if (running && lastPhase !== "idle") setPhaseAudio(lastPhase);
-  }
+  if (!audioReady) return;
+  if (!soundToggle.checked) stopAudioSoft();
+  else if (running && lastPhase !== "idle") setPhaseAudio(lastPhase);
 });
 
-// başlangıç
+// init
 setActivePreset(5);
 updateTotalUI();
 updateSessionUI(0);
 phaseText.textContent = "Hazır";
 phaseTimer.textContent = "00.0";
 setOrbScale(0.82);
-``
