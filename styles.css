@@ -4,15 +4,11 @@
   --text:#eaf6ff;
   --muted:rgba(234,246,255,.65);
 
-  --glass: rgba(255,255,255,.06);
-  --glass2: rgba(255,255,255,.10);
-
   --orbA:#bfeaff;
   --orbB:#7fd0ff;
   --orbC:#4aa7ff;
 
   --shadow: 0 22px 70px rgba(0,0,0,.55);
-  --shadow2: 0 12px 30px rgba(0,0,0,.35);
   --radius: 18px;
 
   --scale: 0.82; /* JS bunu sürekli güncelliyor */
@@ -90,7 +86,6 @@ body{
   transform: scale(var(--scale));
   will-change: transform, filter;
 
-  /* “gerçekçi” pastel mavi: katmanlı radial + highlight + iç gölge */
   background:
     radial-gradient(circle at 30% 25%, rgba(255,255,255,.92), rgba(255,255,255,.15) 26%, transparent 40%),
     radial-gradient(circle at 55% 65%, rgba(180,245,255,.55), rgba(127,208,255,.22) 40%, transparent 65%),
@@ -106,7 +101,6 @@ body{
   overflow: hidden;
 }
 
-/* Yumuşak parıltı ve “doku” efekti */
 .orb::before{
   content:"";
   position:absolute;
